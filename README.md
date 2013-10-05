@@ -1,4 +1,4 @@
-scc
+aam
 ===
 
-Static Contract Checking
+Abstracting Abstract Machines
