@@ -6,7 +6,7 @@ Require Export SfLib.
 
 (* Syntax of LambdaSCC *)
 
-(* Primitives *)b
+(* Primitives *)
 Inductive prim : Type :=
   | IsNumber : prim
   | IsFalse : prim
@@ -79,5 +79,3 @@ Inductive prog : Type :=
   | Prog : list mod -> expr -> prog.
 
 (* Run-time syntax of LambdaSCC *)
-
-Inductive 
