@@ -1,11 +1,17 @@
-Require Export SfLib.
+(* Abstracting Abstract Machines (Van Horn and Might, ICFP'10) *)
 
-Module CEK.
+Require Export SfLib.
 
 Inductive expr : Type :=
   | var : id -> expr
   | app : expr -> expr -> expr
   | abs : id -> expr -> expr.
+
+Tactic Notation "expr_cases" tactic(first) ident(c) :=
+  first;
+  [ Case_aux c "var" | Case_aux c "app" | Case_aux c "abs" ].
+
+Module CEK.
 
 Inductive val : Type :=
   | clo : id -> expr -> partial_map val -> val.
@@ -57,10 +63,6 @@ Inductive step : state -> state -> Prop :=
 
 where "s1 '==>' s2" := (step s1 s2).
 
-Tactic Notation "expr_cases" tactic(first) ident(c) :=
-  first;
-  [ Case_aux c "var" | Case_aux c "app" | Case_aux c "abs" ].
-
 Tactic Notation "step_cases" tactic(first) ident(c) :=
   first;
   [ Case_aux c "cek1" | Case_aux c "cek2" | Case_aux c "cek3"
@@ -85,3 +87,4 @@ Proof.
 Qed.
 
 End CEK.
+
