@@ -43,14 +43,38 @@ Fixpoint env_lookup p x :=
       if beq_id x y then Some (v, p') else env_lookup q x
   end.
 
+Fixpoint env_size p :=
+  match p with
+    | env_empty => 0
+    | env_extend q x (v, p') =>
+      env_size q + env_size p' + 1
+  end.
+
 Inductive kont : Type :=
   | mt : kont
   | ar : expr -> env -> kont -> kont
   | fn : val -> env -> kont -> kont.
 
+Fixpoint kont_size k :=
+  match k with
+    | mt => 0
+    | ar e p k' =>
+      env_size p + kont_size k'
+    | fn v p k' =>
+      env_size p + kont_size k'
+  end.
+
 Inductive state : Type :=
   | ev : expr -> env -> kont -> state
   | ap : val -> env -> kont -> state.
+
+Fixpoint state_size s :=
+  match s with
+    | ev e p k =>
+      env_size p + kont_size k
+    | ap v p k =>
+      env_size p + kont_size k
+  end.
 
 Definition inj : expr -> state :=
   fun e => ev e env_empty mt.
@@ -140,48 +164,55 @@ Fixpoint store_lookup s a :=
       if beq_id a b then Some (v, p') else store_lookup t a
   end.
 
+Fixpoint alloc s :=
+  match s with
+    | store_empty => Id 0
+    | store_extend t (Id n) (v, p') => Id (n + 1)
+  end.
+
 Inductive kont : Type :=
   | mt : kont
   | ar : expr -> env -> kont -> kont
   | fn : val -> env -> kont -> kont.
 
 Inductive state : Type :=
-  | ev : expr -> env -> store -> kont -> nat -> state
-  | ap : val -> env -> store -> kont -> nat -> state.
+  | ev : expr -> env -> store -> kont -> state
+  | ap : val -> env -> store -> kont -> state.
 
 Definition inj : expr -> state :=
-  fun e => ev e env_empty store_empty mt 0.
+  fun e => ev e env_empty store_empty mt.
 
 Reserved Notation "s1 '==>' s2" (at level 40).
 
 Inductive step : state -> state -> Prop :=
   | cesk0 :
-      forall x e p s k n,
-        ev (e_abs x e) p s k n
+      forall x e p s k,
+        ev (e_abs x e) p s k
         ==>
-        ap (v_abs x e) p s k n
+        ap (v_abs x e) p s k
   | cesk1 :
-      forall x p s k a v p' n,
+      forall x p s k a v p',
         env_lookup p x = Some a ->
         store_lookup s a = Some (v, p') ->
-        ev (e_var x) p s k n
+        ev (e_var x) p s k
         ==>
-        ap v p' s k n
+        ap v p' s k
   | cesk2 :
-      forall e0 e1 p s k n,
-        ev (e_app e0 e1) p s k n
+      forall e0 e1 p s k,
+        ev (e_app e0 e1) p s k
         ==>
-        ev e0 p s (ar e1 p k) n
+        ev e0 p s (ar e1 p k)
   | cesk3 :
-      forall v p s e p' k n,
-        ap v p s (ar e p' k) n
+      forall v p s e p' k,
+        ap v p s (ar e p' k)
         ==>
-        ev e p' s (fn v p k) n
+        ev e p' s (fn v p k)
   | cesk4 :
-      forall v p s x e p' k n,
-        ap v p s (fn (v_abs x e) p' k) n
+      forall v p s x e p' k a,
+        a = alloc s ->
+        ap v p s (fn (v_abs x e) p' k)
         ==>
-        ev e (env_extend p' x (Id n)) (store_extend s (Id n) (v, p)) k (n + 1)
+        ev e (env_extend p' x a) (store_extend s a (v, p)) k
 
 where "s1 '==>' s2" := (step s1 s2).
 
@@ -193,7 +224,8 @@ Example ex1 :
   forall x y,
     inj (e_app (e_abs x (e_var x)) (e_abs y (e_var y)))
     ==>*
-    ap (v_abs y (e_var y)) env_empty (store_extend store_empty (Id 0) (v_abs y (e_var y), env_empty)) mt 1.
+    ap (v_abs y (e_var y)) env_empty
+    (store_extend store_empty (Id 0) (v_abs y (e_var y), env_empty)) mt.
 Proof.
   intros. unfold inj.
   eapply multi_step. apply cesk2.
@@ -201,6 +233,7 @@ Proof.
   eapply multi_step. apply cesk3.
   eapply multi_step. apply cesk0.
   eapply multi_step. apply cesk4.
+    reflexivity.
   eapply multi_step. eapply cesk1.
     simpl. rewrite <- beq_id_refl. reflexivity. reflexivity.
   apply multi_refl.
@@ -208,99 +241,139 @@ Qed.
 
 End CESK.
 
-Tactic Notation "CEK.step_cases" tactic(first) ident(c) :=
-  first;
-  [ Case_aux c "cek0" | Case_aux c "cek1" | Case_aux c "cek2"
-    | Case_aux c "cek3" | Case_aux c "cek4" | Case_aux c "cek5" ].
+(* ###################################################################### *)
 
-Tactic Notation "CESK.step_cases" tactic(first) ident(c) :=
-  first;
-  [ Case_aux c "cesk0" | Case_aux c "cesk1" | Case_aux c "cesk2"
-    | Case_aux c "cesk3" | Case_aux c "cesk4" | Case_aux c "cesk5" ].
-
-Fixpoint cesk_cek_env p s n :=
-  match p with
-    | CESK.env_empty => CEK.env_empty
-    | CESK.env_extend q x a =>
-      match n with
-        | 0 => CEK.env_empty (* error *)
-        | S n' =>
-          match CESK.store_lookup s a with
-            | None => CEK.env_empty (* error *)
-            | Some (v, p') =>
-              CEK.env_extend (cesk_cek_env q s n') x (v, (cesk_cek_env p' s n'))
-          end
-      end
-  end.
-
-Fixpoint cesk_cek_kont k s n :=
-  match k with
-    | CESK.mt => CEK.mt
-    | CESK.ar e p k' =>
-      CEK.ar e (cesk_cek_env p s n) (cesk_cek_kont k' s n)
-    | CESK.fn v p k' =>
-      CEK.fn v (cesk_cek_env p s n) (cesk_cek_kont k' s n)
-  end.
-
-Fixpoint cesk_cek_state st :=
-  match st with
-    | CESK.ev e p s k n =>
-      CEK.ev e (cesk_cek_env p s n) (cesk_cek_kont k s n)
-    | CESK.ap v p s k n =>
-      CEK.ap v (cesk_cek_env p s n) (cesk_cek_kont k s n)
-  end.
-
-Theorem cesk_cek_inj_eq :
-  forall e,
-    cesk_cek_state (CESK.inj e) = CEK.inj e.
-Proof. reflexivity. Qed.
-
-Inductive cek_cesk_env_sim : CEK.env -> CESK.env -> CESK.store -> Prop :=
+Inductive cek_sim_cesk_env : CEK.env -> CESK.env -> CESK.store -> Prop :=
   | empty_sim :
       forall s2,
-        cek_cesk_env_sim CEK.env_empty CESK.env_empty s2
+        cek_sim_cesk_env CEK.env_empty CESK.env_empty s2
   | extend_sim :
       forall q1 x1 v1 p1,
         forall q2 x2 a2 v2 p2 s2,
           x1 = x2 ->
           v1 = v2 ->
-          cek_cesk_env_sim q1 q2 s2 ->
-          cek_cesk_env_sim p1 p2 s2 ->
+          cek_sim_cesk_env q1 q2 s2 ->
+          cek_sim_cesk_env p1 p2 s2 ->
           CESK.store_lookup s2 a2 = Some (v2, p2) ->
-          cek_cesk_env_sim
+          cek_sim_cesk_env
             (CEK.env_extend q1 x1 (v1, p1)) (CESK.env_extend q2 x2 a2) s2.
 
-Inductive cek_cesk_kont_sim : CEK.kont -> CESK.kont -> CESK.store -> Prop :=
+Hint Constructors cek_sim_cesk_env.
+
+Inductive cek_sim_cesk_kont : CEK.kont -> CESK.kont -> CESK.store -> Prop :=
   | mt_sim :
       forall s2,
-        cek_cesk_kont_sim CEK.mt CESK.mt s2
+        cek_sim_cesk_kont CEK.mt CESK.mt s2
   | ar_sim :
       forall e1 p1 k1,
         forall e2 p2 s2 k2,
           e1 = e2 ->
-          cek_cesk_env_sim p1 p2 s2 ->
-          cek_cesk_kont_sim k1 k2 s2 ->
-          cek_cesk_kont_sim (CEK.ar e1 p1 k1) (CESK.ar e2 p2 k2) s2
+          cek_sim_cesk_env p1 p2 s2 ->
+          cek_sim_cesk_kont k1 k2 s2 ->
+          cek_sim_cesk_kont (CEK.ar e1 p1 k1) (CESK.ar e2 p2 k2) s2
   | fn_sim :
       forall v1 p1 k1,
         forall v2 p2 s2 k2,
           v1 = v2 ->
-          cek_cesk_env_sim p1 p2 s2 ->
-          cek_cesk_kont_sim k1 k2 s2 ->
-          cek_cesk_kont_sim (CEK.fn v1 p1 k1) (CESK.fn v2 p2 k2) s2.
+          cek_sim_cesk_env p1 p2 s2 ->
+          cek_sim_cesk_kont k1 k2 s2 ->
+          cek_sim_cesk_kont (CEK.fn v1 p1 k1) (CESK.fn v2 p2 k2) s2.
 
-Inductive cek_cesk_state_sim : CEK.state -> CESK.state -> Prop :=
+Hint Constructors cek_sim_cesk_kont.
+
+Inductive cek_sim_cesk_state : CEK.state -> CESK.state -> Prop :=
   | ev_sim :
       forall e1 p1 k1,
-        forall e2 p2 s2 k2 n2,
+        forall e2 p2 s2 k2,
           e1 = e2 ->
-          cek_cesk_env_sim p1 p2 s2 ->
-          cek_cesk_kont_sim k1 k2 s2 ->
-          cek_cesk_state_sim (CEK.ev e1 p1 k1) (CESK.ev e2 p2 s2 k2 n2)
+          cek_sim_cesk_env p1 p2 s2 ->
+          cek_sim_cesk_kont k1 k2 s2 ->
+          cek_sim_cesk_state (CEK.ev e1 p1 k1) (CESK.ev e2 p2 s2 k2)
   | ap_sim :
       forall v1 p1 k1,
-        forall v2 p2 s2 k2 n2,
+        forall v2 p2 s2 k2,
           v1 = v2 ->
-          cek_cesk_env_sim p1 p2 s2 ->
-          cek_cesk_kont_sim k1 k2 s2 ->
-          cek_cesk_state_sim (CEK.ap v1 p1 k1) (CESK.ap v2 p2 s2 k2 n2).
+          cek_sim_cesk_env p1 p2 s2 ->
+          cek_sim_cesk_kont k1 k2 s2 ->
+          cek_sim_cesk_state (CEK.ap v1 p1 k1) (CESK.ap v2 p2 s2 k2).
+
+Hint Constructors cek_sim_cesk_state.
+
+(* ###################################################################### *)
+
+Fixpoint cek_to_cesk_env p1 s2 n :=
+  match p1 with
+    | CEK.env_empty => (CESK.env_empty, s2, n)
+    | CEK.env_extend q1 x1 (v1, p1') =>
+      match cek_to_cesk_env q1 s2 n with
+        | (q2, s2', n') =>
+          match cek_to_cesk_env p1' s2' n' with
+            | (p2', s2'', S n'') =>
+              (CESK.env_extend q2 x1 (Id (S n'')),
+               CESK.store_extend s2'' (Id (S n'')) (v1, p2'),
+               n'')
+            | (_, _, 0) => (* error *)
+              (CESK.env_empty, CESK.store_empty, 0)
+          end
+      end
+  end.
+
+Fixpoint cek_to_cesk_kont k1 s2 n :=
+  match k1 with
+    | CEK.mt => (CESK.mt, s2, n)
+    | CEK.ar e1 p1 k1' =>
+      match cek_to_cesk_env p1 s2 n with
+        | (p2, s2', n') =>
+          match cek_to_cesk_kont k1' s2' n' with
+            | (k2, s2'', n'') =>
+              (CESK.ar e1 p2 k2, s2'', n'')
+          end
+      end
+    | CEK.fn v1 p1 k1' =>
+      match cek_to_cesk_env p1 s2 n with
+        | (p2, s2', n') =>
+          match cek_to_cesk_kont k1' s2' n' with
+            | (k2, s2'', n'') =>
+              (CESK.fn v1 p2 k2, s2'', n'')
+          end
+      end
+  end.
+
+Fixpoint cek_to_cesk_state s1 :=
+  match (s1, CEK.state_size s1) with
+    | (CEK.ev e1 p1 k1, n) =>
+      match cek_to_cesk_env p1 CESK.store_empty n with
+        | (p2, s2, n') =>
+          match cek_to_cesk_kont k1 s2 n' with
+            | (k2, s2', n'') =>
+              CESK.ev e1 p2 s2' k2
+          end
+      end
+    | (CEK.ap v1 p1 k1, n) =>
+      match cek_to_cesk_env p1 CESK.store_empty n with
+        | (p2, s2, n') =>
+          match cek_to_cesk_kont k1 s2 n' with
+            | (k2, s2', n'') =>
+              CESK.ap v1 p2 s2' k2
+          end
+      end
+  end.
+
+(* ###################################################################### *)
+
+Lemma somethin :
+  forall s1, exists s2, cek_sim_cesk_state s1 s2.
+Proof.
+  intro s1. apply ex_intro with (cek_to_cesk_state s1).
+  destruct s1 as [e1 p1 k1 | v1 p1 k1].
+  Case "CEK.ev".
+    induction p1 as [| q1 x1 vp'].
+    SCase "CEK.env_empty".
+      induction k1 as [| e1' p1' k1' | v1 p1' k1'].
+      SSCase "CEK.mt".
+        apply ev_sim.
+          reflexivity.
+        apply empty_sim.
+        apply mt_sim.
+      SSCase "CEK.ar".
+        Admitted.
