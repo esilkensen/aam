@@ -361,19 +361,15 @@ Fixpoint cek_to_cesk_state s1 :=
 
 (* ###################################################################### *)
 
-Lemma somethin :
-  forall s1, exists s2, cek_sim_cesk_state s1 s2.
+Notation "s1 'CEK.==>' s2" := (CEK.step s1 s2) (at level 40).
+Notation "s1 'CESK.==>' s2" := (CESK.step s1 s2) (at level 40).
+Notation "s1 'CEK.==>*' s2" := (multi CEK.step s1 s2) (at level 40).
+Notation "s1 'CESK.==>*' s2" := (multi CESK.step s1 s2) (at level 40).
+Notation "s1 '~' t1" := (cek_sim_cesk_state s1 t1) (at level 40).
+
+Lemma somethin_good :
+  forall e,
+    (CEK.inj e) ~ (CESK.inj e).
 Proof.
-  intro s1. apply ex_intro with (cek_to_cesk_state s1).
-  destruct s1 as [e1 p1 k1 | v1 p1 k1].
-  Case "CEK.ev".
-    induction p1 as [| q1 x1 vp'].
-    SCase "CEK.env_empty".
-      induction k1 as [| e1' p1' k1' | v1 p1' k1'].
-      SSCase "CEK.mt".
-        apply ev_sim.
-          reflexivity.
-        apply empty_sim.
-        apply mt_sim.
-      SSCase "CEK.ar".
-        Admitted.
+  intro e. unfold CEK.inj. unfold CESK.inj. auto.
+Qed.
