@@ -14,6 +14,19 @@ Theorem beq_id_refl : forall X,
   true = beq_id X X.
 Proof. destruct X. apply beq_nat_refl. Qed.
 
+Theorem beq_id_sym: forall i1 i2,
+  beq_id i1 i2 = beq_id i2 i1.
+Proof.
+  intros. destruct i1. destruct i2. unfold beq_id. apply beq_nat_sym.
+Qed.
+
+Theorem beq_id_eq : forall i1 i2,
+  true = beq_id i1 i2 -> i1 = i2.
+Proof.
+  intros. destruct i1. destruct i2. unfold beq_id in H.
+  apply beq_nat_eq in H. rewrite H. reflexivity.
+Qed.
+
 (* ###################################################################### *)
 
 Inductive expr : Type :=
@@ -43,38 +56,14 @@ Fixpoint env_lookup p x :=
       if beq_id x y then Some (v, p') else env_lookup q x
   end.
 
-Fixpoint env_size p :=
-  match p with
-    | env_empty => 0
-    | env_extend q x (v, p') =>
-      env_size q + env_size p' + 1
-  end.
-
 Inductive kont : Type :=
   | mt : kont
   | ar : expr -> env -> kont -> kont
   | fn : val -> env -> kont -> kont.
 
-Fixpoint kont_size k :=
-  match k with
-    | mt => 0
-    | ar e p k' =>
-      env_size p + kont_size k'
-    | fn v p k' =>
-      env_size p + kont_size k'
-  end.
-
 Inductive state : Type :=
   | ev : expr -> env -> kont -> state
   | ap : val -> env -> kont -> state.
-
-Fixpoint state_size s :=
-  match s with
-    | ev e p k =>
-      env_size p + kont_size k
-    | ap v p k =>
-      env_size p + kont_size k
-  end.
 
 Definition inj : expr -> state :=
   fun e => ev e env_empty mt.
@@ -260,6 +249,35 @@ Inductive cek_sim_cesk_env : CEK.env -> CESK.env -> CESK.store -> Prop :=
 
 Hint Constructors cek_sim_cesk_env.
 
+Lemma cek_sim_cesk_env_lookup :
+  forall p1 p2 s2,
+    cek_sim_cesk_env p1 p2 s2 ->
+    forall x v1 p1',
+      CEK.env_lookup p1 x = Some (v1, p1') ->
+      exists a2 p2',
+        cek_sim_cesk_env p1' p2' s2 /\
+        CESK.env_lookup p2 x = Some a2 /\
+        CESK.store_lookup s2 a2 = Some (v1, p2').
+Proof.
+  intros p1 p2 s2 H1.
+  induction H1; intros.
+  Case "empty".
+    inversion H.
+  Case "extend".
+    subst.
+    remember (beq_id x x2) as b. destruct b.
+    SCase "x = x2".
+      simpl. rewrite <- Heqb.
+      apply beq_id_eq in Heqb. subst.
+      simpl in H2. rewrite <- beq_id_refl in H2. inversion H2; subst.
+      apply ex_intro with a2. apply ex_intro with p2.
+      split. assumption. split. reflexivity. assumption.
+    SCase "x <> x2".
+      simpl. rewrite <- Heqb.
+      simpl in H2. rewrite <- Heqb in H2. 
+      apply IHcek_sim_cesk_env1 in H2. assumption.
+Qed.
+
 Inductive cek_sim_cesk_kont : CEK.kont -> CESK.kont -> CESK.store -> Prop :=
   | mt_sim :
       forall s2,
@@ -357,6 +375,34 @@ Proof.
             apply step_n with t1; assumption.
             assumption.
         SSSCase "cek1".
+          assert
+            (exists t,
+               n_steps CESK.step (CESK.inj (e_var i)) t n' /\
+               (CEK.ev (e_var x) p k) ~ t) by
+            (apply IHn'; assumption).
+          inversion H3 as [t1]. inversion H5.
+          assert
+            (exists t1',
+               n_steps CESK.step t1 t1' 1 /\
+               (CEK.ap v p' k) ~ t1').
+          SSSSCase "Proof of assertion".
+            inversion H7; subst.
+            apply cek_sim_cesk_env_lookup with p p2 s2 x v p' in H13.
+            inversion H13; subst. inversion H8; subst. inversion H9; subst.
+            inversion H11; subst. clear H9. clear H8. clear H11. clear H13.
+            eapply ex_intro. split.
+              apply step_1.
+                eapply CESK.cesk1; eassumption.
+                apply ap_sim.
+                  reflexivity.
+                  assumption.
+                  assumption.
+                  assumption.
+          inversion H8 as [t1']. inversion H9.
+          apply ex_intro with t1'. split.
+            apply step_n with t1; assumption.
+            assumption.
+        SSSCase "cek2".
           Admitted.
 
 Lemma cesk_sim_cek_step :
@@ -377,63 +423,3 @@ Proof.
     expr_cases (destruct e) SCase.
     SCase "e_var".
       Admitted.
-
-(* ###################################################################### *)
-
-Fixpoint cek_to_cesk_env p1 s2 n :=
-  match p1 with
-    | CEK.env_empty => (CESK.env_empty, s2, n)
-    | CEK.env_extend q1 x1 (v1, p1') =>
-      match cek_to_cesk_env q1 s2 n with
-        | (q2, s2', n') =>
-          match cek_to_cesk_env p1' s2' n' with
-            | (p2', s2'', S n'') =>
-              (CESK.env_extend q2 x1 (Id (S n'')),
-               CESK.store_extend s2'' (Id (S n'')) (v1, p2'),
-               n'')
-            | (_, _, 0) => (* error *)
-              (CESK.env_empty, CESK.store_empty, 0)
-          end
-      end
-  end.
-
-Fixpoint cek_to_cesk_kont k1 s2 n :=
-  match k1 with
-    | CEK.mt => (CESK.mt, s2, n)
-    | CEK.ar e1 p1 k1' =>
-      match cek_to_cesk_env p1 s2 n with
-        | (p2, s2', n') =>
-          match cek_to_cesk_kont k1' s2' n' with
-            | (k2, s2'', n'') =>
-              (CESK.ar e1 p2 k2, s2'', n'')
-          end
-      end
-    | CEK.fn v1 p1 k1' =>
-      match cek_to_cesk_env p1 s2 n with
-        | (p2, s2', n') =>
-          match cek_to_cesk_kont k1' s2' n' with
-            | (k2, s2'', n'') =>
-              (CESK.fn v1 p2 k2, s2'', n'')
-          end
-      end
-  end.
-
-Fixpoint cek_to_cesk_state s1 :=
-  match (s1, CEK.state_size s1) with
-    | (CEK.ev e1 p1 k1, n) =>
-      match cek_to_cesk_env p1 CESK.store_empty n with
-        | (p2, s2, n') =>
-          match cek_to_cesk_kont k1 s2 n' with
-            | (k2, s2', n'') =>
-              CESK.ev e1 p2 s2' k2
-          end
-      end
-    | (CEK.ap v1 p1 k1, n) =>
-      match cek_to_cesk_env p1 CESK.store_empty n with
-        | (p2, s2, n') =>
-          match cek_to_cesk_kont k1 s2 n' with
-            | (k2, s2', n'') =>
-              CESK.ap v1 p2 s2' k2
-          end
-      end
-  end.
