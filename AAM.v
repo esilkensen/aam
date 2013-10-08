@@ -321,105 +321,44 @@ Notation "s1 '~' t1" := (cek_sim_cesk_state s1 t1) (at level 40).
 
 (* ###################################################################### *)
 
-Inductive n_steps {X : Type} (step : relation X) : X -> X -> nat -> Prop :=
-  | step_0 : forall s1,
-               n_steps step s1 s1 0
-  | step_1 : forall s1 s2,
-               step s1 s2 ->
-               n_steps step s1 s2 1
-  | step_n : forall s1 s2 s3 n,
-               n_steps step s1 s2 n ->
-               n_steps step s2 s3 1 ->
-               n_steps step s1 s3 (1 + n).
+Inductive multi_n {X : Type} (R : relation X) : X -> X -> nat -> Prop :=
+  | multi_n_refl : forall x,
+                     multi_n R x x 0
+  | multi_n_step : forall x y z n,
+                     multi_n R x y n ->
+                     R y z ->
+                     multi_n R x z (1 + n).
+
+Hint Constructors multi_n.
 
 Lemma cek_sim_cesk_step :
   forall e s n,
-    n_steps CEK.step (CEK.inj e) s n ->
+    multi_n CEK.step (CEK.inj e) s n ->
     exists t,
-      n_steps CESK.step (CESK.inj e) t n /\ s ~ t.
+      multi_n CESK.step (CESK.inj e) t n /\ s ~ t.
 Proof.
   intros e s n. generalize dependent s.
-  induction n as [| n']; intros s H.
+  induction n as [| n']; (intros s H; inversion H; subst).
   Case "n = 0".
     unfold CEK.inj in H. unfold CESK.inj.
-    expr_cases (destruct e) SCase;
-      (eapply ex_intro;
-       split; [apply step_0 |
-               inversion H; subst; auto]).
+    eapply ex_intro. split; [auto | unfold CEK.inj; auto].
   Case "n = S n'".
-    expr_cases (destruct e) SCase.
-    SCase "e_var".
-      inversion H; subst.
-      SSCase "step_1".
-        inversion H3; subst.
-        inversion H5.
-      SSCase "step_n".
-        inversion H4; subst. inversion H0; subst.
-        SSSCase "cek0".
-          assert
-            (exists t,
-               n_steps CESK.step (CESK.inj (e_var i)) t n' /\
-               (CEK.ev (e_abs x e) p k) ~ t) by
-            (apply IHn'; assumption).
-          inversion H2 as [t1]. inversion H3.
-          assert
-            (exists t1',
-               n_steps CESK.step t1 t1' 1 /\
-               (CEK.ap (v_abs x e) p k) ~ t1') by
-              (inversion H6; subst;
-               eapply ex_intro;
-               split; [apply step_1; auto |
-                       auto]).
-          inversion H7 as [t1']. inversion H8.
-          apply ex_intro with t1'. split.
-            apply step_n with t1; assumption.
-            assumption.
-        SSSCase "cek1".
-          assert
-            (exists t,
-               n_steps CESK.step (CESK.inj (e_var i)) t n' /\
-               (CEK.ev (e_var x) p k) ~ t) by
-            (apply IHn'; assumption).
-          inversion H3 as [t1]. inversion H5.
-          assert
-            (exists t1',
-               n_steps CESK.step t1 t1' 1 /\
-               (CEK.ap v p' k) ~ t1').
-          SSSSCase "Proof of assertion".
-            inversion H7; subst.
-            apply cek_sim_cesk_env_lookup with p p2 s2 x v p' in H13.
-            inversion H13; subst. inversion H8; subst. inversion H9; subst.
-            inversion H11; subst. clear H9. clear H8. clear H11. clear H13.
-            eapply ex_intro. split.
-              apply step_1.
-                eapply CESK.cesk1; eassumption.
-                apply ap_sim.
-                  reflexivity.
-                  assumption.
-                  assumption.
-                  assumption.
-          inversion H8 as [t1']. inversion H9.
-          apply ex_intro with t1'. split.
-            apply step_n with t1; assumption.
-            assumption.
-        SSSCase "cek2".
-          Admitted.
+    apply IHn' in H1. inversion H1 as [t]. inversion H0. clear H0.
+    inversion H4; (subst; inversion H3; subst).
+    SCase "cek0".
+      eauto.
+    SCase "cek1".
+      apply cek_sim_cesk_env_lookup with p p2 s2 x v p' in H10.
+        inversion H10. inversion H5. inversion H6. inversion H8.
+        eapply ex_intro. split; eauto.
+      assumption.
+    SCase "cek2".
+      Admitted.
 
 Lemma cesk_sim_cek_step :
   forall e t n,
-    n_steps CESK.step (CESK.inj e) t n ->
+    multi_n CESK.step (CESK.inj e) t n ->
     exists s,
-      n_steps CEK.step (CEK.inj e) s n /\ s ~ t.
+      multi_n CEK.step (CEK.inj e) s n /\ s ~ t.
 Proof.
-  intros e t n. generalize dependent t.
-  unfold CEK.inj. unfold CESK.inj.
-  induction n as [| n']; intros s H.
-  Case "n = 0".
-    expr_cases (destruct e) SCase;
-      (eapply ex_intro;
-       split; [apply step_0 |
-               inversion H; subst; auto]).
-  Case "n = S n'".
-    expr_cases (destruct e) SCase.
-    SCase "e_var".
-      Admitted.
+  Admitted.
