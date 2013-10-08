@@ -237,45 +237,81 @@ Inductive cek_sim_cesk_env : CEK.env -> CESK.env -> CESK.store -> Prop :=
       forall s2,
         cek_sim_cesk_env CEK.env_empty CESK.env_empty s2
   | extend_sim :
-      forall q1 x1 v1 p1,
-        forall q2 x2 a2 v2 p2 s2,
-          x1 = x2 ->
-          v1 = v2 ->
+      forall q1 x v p1,
+        forall q2 a p2 s2,
           cek_sim_cesk_env q1 q2 s2 ->
           cek_sim_cesk_env p1 p2 s2 ->
-          CESK.store_lookup s2 a2 = Some (v2, p2) ->
+          CESK.store_lookup s2 a = Some (v, p2) ->
           cek_sim_cesk_env
-            (CEK.env_extend q1 x1 (v1, p1)) (CESK.env_extend q2 x2 a2) s2.
+            (CEK.env_extend q1 x (v, p1)) (CESK.env_extend q2 x a) s2.
 
 Hint Constructors cek_sim_cesk_env.
 
-Lemma cek_sim_cesk_env_lookup :
+Lemma cek_sim_cesk_env_store_empty_inv :
+  forall p1 p2,
+    cek_sim_cesk_env p1 p2 CESK.store_empty ->
+    p1 = CEK.env_empty /\ p2 = CESK.env_empty.
+Proof.
+  intros p1 p2 H.
+  inversion H; subst.
+  Case "empty_sim".
+    split; reflexivity.
+  Case "extend_sim".
+    inversion H2.
+Qed.
+
+Lemma cek_sim_cesk_env_lookup_cek :
   forall p1 p2 s2,
     cek_sim_cesk_env p1 p2 s2 ->
-    forall x v1 p1',
-      CEK.env_lookup p1 x = Some (v1, p1') ->
-      exists a2 p2',
-        cek_sim_cesk_env p1' p2' s2 /\
-        CESK.env_lookup p2 x = Some a2 /\
-        CESK.store_lookup s2 a2 = Some (v1, p2').
+    forall x v p1',
+      CEK.env_lookup p1 x = Some (v, p1') ->
+      exists a p2',
+        CESK.env_lookup p2 x = Some a /\
+        CESK.store_lookup s2 a = Some (v, p2') /\
+        cek_sim_cesk_env p1' p2' s2.
 Proof.
   intros p1 p2 s2 H1.
   induction H1; intros.
-  Case "empty".
+  Case "empty_sim".
     inversion H.
-  Case "extend".
-    subst.
-    remember (beq_id x x2) as b. destruct b.
-    SCase "x = x2".
+  Case "extend_sim".
+    remember (beq_id x0 x) as b. destruct b.
+    SCase "x0 = x".
+      simpl in H0. rewrite <- Heqb in H0. inversion H0. subst.
+      apply ex_intro with a. apply ex_intro with p2.
+      split. simpl. rewrite <- Heqb. reflexivity.
+      split; assumption.
+    SCase "x0 <> x".
+      simpl in H0. rewrite <- Heqb in H0.
       simpl. rewrite <- Heqb.
-      apply beq_id_eq in Heqb. subst.
-      simpl in H2. rewrite <- beq_id_refl in H2. inversion H2; subst.
-      apply ex_intro with a2. apply ex_intro with p2.
-      split. assumption. split. reflexivity. assumption.
-    SCase "x <> x2".
+      apply IHcek_sim_cesk_env1.
+      assumption.
+Qed.
+
+Lemma cek_sim_cesk_env_lookup_cesk :
+  forall p1 p2 s2,
+    cek_sim_cesk_env p1 p2 s2 ->
+    forall x a v p2',
+      CESK.env_lookup p2 x = Some a ->
+      CESK.store_lookup s2 a = Some (v, p2') ->
+      exists p1',
+        CEK.env_lookup p1 x = Some (v, p1') /\
+        cek_sim_cesk_env p1' p2' s2.
+Proof.
+  intros p1 p2 s2 H1.
+  induction H1; intros.
+  Case "empty_sim".
+    inversion H. inversion H0.
+  Case "extend_sim".
+    remember (beq_id x0 x) as b. destruct b.
+    SCase "x0 = x".
+      inversion H3. subst. rewrite H in H1. inversion H1. subst.
+      simpl. rewrite <- Heqb. apply ex_intro with p1.
+      split. reflexivity. assumption.
+    SCase "x0 <> x".
       simpl. rewrite <- Heqb.
-      simpl in H2. rewrite <- Heqb in H2. 
-      apply IHcek_sim_cesk_env1 in H2. assumption.
+      eapply IHcek_sim_cesk_env1. eassumption.
+      assumption.
 Qed.
 
 Inductive cek_sim_cesk_kont : CEK.kont -> CESK.kont -> CESK.store -> Prop :=
@@ -283,37 +319,33 @@ Inductive cek_sim_cesk_kont : CEK.kont -> CESK.kont -> CESK.store -> Prop :=
       forall s2,
         cek_sim_cesk_kont CEK.mt CESK.mt s2
   | ar_sim :
-      forall e1 p1 k1,
-        forall e2 p2 s2 k2,
-          e1 = e2 ->
+      forall e p1 k1,
+        forall p2 s2 k2,
           cek_sim_cesk_env p1 p2 s2 ->
           cek_sim_cesk_kont k1 k2 s2 ->
-          cek_sim_cesk_kont (CEK.ar e1 p1 k1) (CESK.ar e2 p2 k2) s2
+          cek_sim_cesk_kont (CEK.ar e p1 k1) (CESK.ar e p2 k2) s2
   | fn_sim :
-      forall v1 p1 k1,
-        forall v2 p2 s2 k2,
-          v1 = v2 ->
+      forall v p1 k1,
+        forall p2 s2 k2,
           cek_sim_cesk_env p1 p2 s2 ->
           cek_sim_cesk_kont k1 k2 s2 ->
-          cek_sim_cesk_kont (CEK.fn v1 p1 k1) (CESK.fn v2 p2 k2) s2.
+          cek_sim_cesk_kont (CEK.fn v p1 k1) (CESK.fn v p2 k2) s2.
 
 Hint Constructors cek_sim_cesk_kont.
 
 Inductive cek_sim_cesk_state : CEK.state -> CESK.state -> Prop :=
   | ev_sim :
-      forall e1 p1 k1,
-        forall e2 p2 s2 k2,
-          e1 = e2 ->
+      forall e p1 k1,
+        forall p2 s2 k2,
           cek_sim_cesk_env p1 p2 s2 ->
           cek_sim_cesk_kont k1 k2 s2 ->
-          cek_sim_cesk_state (CEK.ev e1 p1 k1) (CESK.ev e2 p2 s2 k2)
+          cek_sim_cesk_state (CEK.ev e p1 k1) (CESK.ev e p2 s2 k2)
   | ap_sim :
-      forall v1 p1 k1,
-        forall v2 p2 s2 k2,
-          v1 = v2 ->
+      forall v p1 k1,
+        forall p2 s2 k2,
           cek_sim_cesk_env p1 p2 s2 ->
           cek_sim_cesk_kont k1 k2 s2 ->
-          cek_sim_cesk_state (CEK.ap v1 p1 k1) (CESK.ap v2 p2 s2 k2).
+          cek_sim_cesk_state (CEK.ap v p1 k1) (CESK.ap v p2 s2 k2).
 
 Hint Constructors cek_sim_cesk_state.
 
@@ -343,17 +375,29 @@ Proof.
     unfold CEK.inj in H. unfold CESK.inj.
     eapply ex_intro. split; [auto | unfold CEK.inj; auto].
   Case "n = S n'".
-    apply IHn' in H1. inversion H1 as [t]. inversion H0. clear H0.
-    inversion H4; (subst; inversion H3; subst).
+    apply IHn' in H1. inversion H1. inversion H0.
+    inversion H4; subst; inversion H3; subst.
     SCase "cek0".
-      eauto.
+      eapply ex_intro. split. eauto. auto.
     SCase "cek1".
-      apply cek_sim_cesk_env_lookup with p p2 s2 x v p' in H10.
-        inversion H10. inversion H5. inversion H6. inversion H8.
+      apply cek_sim_cesk_env_lookup_cek with p p2 s2 x0 v p' in H10.
+        inversion H10. inversion H6. inversion H7. inversion H9.
         eapply ex_intro. split; eauto.
       assumption.
     SCase "cek2".
-      Admitted.
+      eapply ex_intro. split. eauto. auto.
+    SCase "cek3".
+      inversion H10. subst.
+      eapply ex_intro. split. eauto. auto.
+    SCase "cek4".
+      inversion H10. subst.
+      destruct s2.
+      SSCase "store_empty".
+        apply cek_sim_cesk_env_store_empty_inv in H9. inversion H9. subst.
+        eapply ex_intro. split. eauto.
+          apply ev_sim. eapply extend_sim.
+          (* TODO: weakening lemma *)
+          Admitted.
 
 Lemma cesk_sim_cek_step :
   forall e t n,
