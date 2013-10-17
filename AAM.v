@@ -127,7 +127,7 @@ End CEK.
 
 Module CESK.
 
-Definition addr : Type := id.
+Definition addr : Type := nat.
        
 Inductive env : Type :=
   | env_empty : env
@@ -135,9 +135,7 @@ Inductive env : Type :=
 
 Definition storable : Type := (val * env)%type.
 
-Inductive store : Type :=
-  | store_empty : store
-  | store_extend : store -> addr -> storable -> store.
+Definition store : Type := list storable.
 
 Fixpoint env_lookup p x :=
   match p with
@@ -146,18 +144,93 @@ Fixpoint env_lookup p x :=
       if beq_id x y then Some a else env_lookup q x
   end.
 
-Fixpoint store_lookup s a :=
-  match s with
-    | store_empty => None
-    | store_extend t b (v, p') =>
-      if beq_id a b then Some (v, p') else store_lookup t a
+Fixpoint store_lookup (s : store) (a : addr) : option storable :=
+  match a with
+    | 0 => match s with
+             | [] => None
+             | (v, p') :: _ => Some (v, p')
+           end
+    | S n' => match s with
+                | [] => None
+                | _ :: s' => store_lookup s' n'
+              end
   end.
 
-Fixpoint alloc s :=
-  match s with
-    | store_empty => Id 0
-    | store_extend t (Id n) (v, p') => Id (n + 1)
-  end.
+Definition store_extend s x : store := s ++ [x].
+
+Definition alloc (s : store) := length s.
+
+Lemma store_lookup_alloc_none :
+  forall s,
+    store_lookup s (alloc s) = None.
+Proof.
+  induction s; auto.
+Qed.
+
+Lemma store_lookup_alloc_some :
+  forall s v p',
+    store_lookup (store_extend s (v, p')) (alloc s) = Some (v, p').
+Proof.
+  induction s; auto.
+Qed.
+
+Lemma store_lookup_length_inv :
+  forall s n v p',
+    store_lookup s n = Some (v, p') ->
+    n < length s.
+Proof.
+  intros s n. generalize dependent s.
+  induction n as [| n']; intros.
+  Case "n = 0".
+    destruct s as [| x s'].
+    SCase "s = []".
+      inversion H.
+    SCase "s = x :: s'".
+      simpl. omega.
+  Case "n = S n'".
+    destruct s as [| x s'].
+    SCase "s = []".
+      inversion H.
+    SCase "s = x :: s'".
+      inversion H. apply IHn' in H1. simpl. omega.
+Qed.
+
+Lemma store_lookup_length_app :
+  forall s1 s2 n,
+    n < length s1 ->
+    store_lookup (s1 ++ s2) n = store_lookup s1 n.
+Proof.
+  intros. generalize dependent s2. generalize dependent s1.
+  induction n as [| n']; intros.
+  Case "n = 0".
+    destruct s1 as [| x1 s1'].
+    SCase "s1 = []".
+      inversion H.
+    SCase "s1 = x1 :: s1'".
+      reflexivity.
+  Case "n = S n'".
+    destruct s1 as [| x1 s1'].
+    SCase "s1 = []".
+      inversion H.
+    SCase "s1 = x1 :: s1'".
+      simpl. apply IHn'. inversion H. auto. omega.
+Qed.
+
+Lemma store_lookup_alloc_pres :
+  forall s a v1 p1' v2 p2',
+    store_lookup s a = Some (v1, p1') ->
+    store_lookup (store_extend s (v2, p2')) a = Some (v1, p1').
+Proof.
+  intros.
+  destruct a as [| n'].
+  Case "a = 0".
+    destruct s; inversion H. reflexivity.
+  Case "a = S n'".
+    destruct s as [| (v, p') s']; inversion H. simpl. 
+    apply store_lookup_length_app.
+    eapply store_lookup_length_inv.
+    eassumption.
+Qed.
 
 Inductive kont : Type :=
   | mt : kont
@@ -169,7 +242,7 @@ Inductive state : Type :=
   | ap : val -> env -> store -> kont -> state.
 
 Definition inj : expr -> state :=
-  fun e => ev e env_empty store_empty mt.
+  fun e => ev e env_empty [] mt.
 
 Reserved Notation "s1 '==>' s2" (at level 40).
 
@@ -197,11 +270,10 @@ Inductive step : state -> state -> Prop :=
         ==>
         ev e p' s (fn v p k)
   | cesk4 :
-      forall v p s x e p' k a,
-        a = alloc s ->
+      forall v p s x e p' k,
         ap v p s (fn (v_abs x e) p' k)
         ==>
-        ev e (env_extend p' x a) (store_extend s a (v, p)) k
+        ev e (env_extend p' x (alloc s)) (store_extend s (v, p)) k
 
 where "s1 '==>' s2" := (step s1 s2).
 
@@ -213,8 +285,7 @@ Example ex1 :
   forall x y,
     inj (e_app (e_abs x (e_var x)) (e_abs y (e_var y)))
     ==>*
-    ap (v_abs y (e_var y)) env_empty
-    (store_extend store_empty (Id 0) (v_abs y (e_var y), env_empty)) mt.
+    ap (v_abs y (e_var y)) env_empty [(v_abs y (e_var y), env_empty)] mt.
 Proof.
   intros. unfold inj.
   eapply multi_step. apply cesk2.
@@ -222,7 +293,6 @@ Proof.
   eapply multi_step. apply cesk3.
   eapply multi_step. apply cesk0.
   eapply multi_step. apply cesk4.
-    reflexivity.
   eapply multi_step. eapply cesk1.
     simpl. rewrite <- beq_id_refl. reflexivity. reflexivity.
   apply multi_refl.
@@ -249,7 +319,7 @@ Hint Constructors cek_sim_cesk_env.
 
 Lemma cek_sim_cesk_env_store_empty_inv :
   forall p1 p2,
-    cek_sim_cesk_env p1 p2 CESK.store_empty ->
+    cek_sim_cesk_env p1 p2 [] ->
     p1 = CEK.env_empty /\ p2 = CESK.env_empty.
 Proof.
   intros p1 p2 H.
@@ -257,7 +327,24 @@ Proof.
   Case "empty_sim".
     split; reflexivity.
   Case "extend_sim".
-    inversion H2.
+    destruct a; inversion H2.
+Qed.
+
+Lemma cek_sim_cesk_env_store_weakening :
+  forall p1 p2 s2,
+    cek_sim_cesk_env p1 p2 s2 ->
+    forall v p',
+      cek_sim_cesk_env p1 p2 (CESK.store_extend s2 (v, p')).
+Proof.
+  intros p1 p2 s2 H v p'.
+  induction H.
+  Case "empty_sim".
+    apply empty_sim.
+  Case "extend_sim".
+    eapply extend_sim.
+      assumption.
+      eassumption.
+      apply CESK.store_lookup_alloc_pres. assumption.
 Qed.
 
 Lemma cek_sim_cesk_env_lookup_cek :
@@ -333,6 +420,26 @@ Inductive cek_sim_cesk_kont : CEK.kont -> CESK.kont -> CESK.store -> Prop :=
 
 Hint Constructors cek_sim_cesk_kont.
 
+Lemma cek_sim_cesk_kont_store_weakening :
+  forall k1 k2 s2,
+    cek_sim_cesk_kont k1 k2 s2 ->
+    forall v p',
+      cek_sim_cesk_kont k1 k2 (CESK.store_extend s2 (v, p')).
+Proof.
+  intros k1 k2 s2 H v p'.
+  induction H.
+  Case "mt_sim".
+    apply mt_sim.
+  Case "ar_sim".
+    apply ar_sim.
+      apply cek_sim_cesk_env_store_weakening. assumption.
+      assumption.
+  Case "fn_sim".
+    apply fn_sim.
+      apply cek_sim_cesk_env_store_weakening. assumption.
+      assumption.
+Qed.
+
 Inductive cek_sim_cesk_state : CEK.state -> CESK.state -> Prop :=
   | ev_sim :
       forall e p1 k1,
@@ -391,13 +498,14 @@ Proof.
       eapply ex_intro. split. eauto. auto.
     SCase "cek4".
       inversion H10. subst.
-      destruct s2.
-      SSCase "store_empty".
-        apply cek_sim_cesk_env_store_empty_inv in H9. inversion H9. subst.
-        eapply ex_intro. split. eauto.
-          apply ev_sim. eapply extend_sim.
-          (* TODO: weakening lemma *)
-          Admitted.
+      apply cek_sim_cesk_env_store_weakening with p p2 s2 v p2 in H9.
+      apply cek_sim_cesk_env_store_weakening with p' p0 s2 v p2 in H12.
+      eapply ex_intro. split. eauto. 
+      apply ev_sim. eapply extend_sim; eauto. 
+      apply CESK.store_lookup_alloc_some.
+      apply cek_sim_cesk_kont_store_weakening.
+      assumption.
+Qed.
 
 Lemma cesk_sim_cek_step :
   forall e t n,
@@ -405,4 +513,4 @@ Lemma cesk_sim_cek_step :
     exists s,
       multi_n CEK.step (CEK.inj e) s n /\ s ~ t.
 Proof.
-  Admitted.
+  Admitted. (* TODO *)
