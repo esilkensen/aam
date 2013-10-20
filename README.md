@@ -1,4 +1,4 @@
-aam
+coq
 ===
 
-Abstracting Abstract Machines
+Coq playground
