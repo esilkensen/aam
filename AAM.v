@@ -1,33 +1,33 @@
-(* Abstracting Abstract Machines (Van Horn and Might, ICFP'10) *)
-
-Require Export SfLib.
-
-Inductive id : Type := 
-  Id : nat -> id.
-
-Definition beq_id X1 X2 :=
-  match (X1, X2) with
-    (Id n1, Id n2) => beq_nat n1 n2
-  end.
-
-Theorem beq_id_refl : forall X,
-  true = beq_id X X.
-Proof. destruct X. apply beq_nat_refl. Qed.
-
-Theorem beq_id_sym: forall i1 i2,
-  beq_id i1 i2 = beq_id i2 i1.
-Proof.
-  intros. destruct i1. destruct i2. unfold beq_id. apply beq_nat_sym.
-Qed.
-
-Theorem beq_id_eq : forall i1 i2,
-  true = beq_id i1 i2 -> i1 = i2.
-Proof.
-  intros. destruct i1. destruct i2. unfold beq_id in H.
-  apply beq_nat_eq in H. rewrite H. reflexivity.
-Qed.
+Require Import Arith.EqNat.
+Require Import List.
+Import ListNotations.
+Require Import Omega.
 
 (* ###################################################################### *)
+
+Definition relation (X : Type) := X -> X -> Prop.
+
+Inductive multi {X : Type} (R : relation X) : X -> X -> Prop :=
+  | multi_refl : forall (x : X),
+                   multi R x x
+  | multi_step : forall (x y z : X),
+                   R x y ->
+                   multi R y z ->
+                   multi R x z.
+
+Inductive multi_n {X : Type} (R : relation X) : X -> X -> nat -> Prop :=
+  | multi_n_refl : forall x,
+                     multi_n R x x 0
+  | multi_n_step : forall x y z n,
+                     multi_n R x y n ->
+                     R y z ->
+                     multi_n R x z (1 + n).
+
+Hint Constructors multi_n.
+
+(* ###################################################################### *)
+
+Definition id : Type := nat.
 
 Inductive expr : Type :=
   | e_var : id -> expr
@@ -36,10 +36,6 @@ Inductive expr : Type :=
 
 Inductive val : Type :=
   | v_abs : id -> expr -> val.
-
-Tactic Notation "expr_cases" tactic(first) ident(c) :=
-  first;
-  [ Case_aux c "e_var" | Case_aux c "e_app" | Case_aux c "e_abs" ].
 
 (* ###################################################################### *)
 
@@ -53,7 +49,7 @@ Fixpoint env_lookup p x :=
   match p with
     | env_empty => None
     | env_extend q y (v, p') =>
-      if beq_id x y then Some (v, p') else env_lookup q x
+      if beq_nat x y then Some (v, p') else env_lookup q x
   end.
 
 Inductive kont : Type :=
@@ -117,7 +113,7 @@ Proof.
   eapply multi_step. apply cek0.
   eapply multi_step. apply cek4.
   eapply multi_step. apply cek1.
-    simpl. rewrite <- beq_id_refl. reflexivity.
+    simpl. rewrite <- beq_nat_refl. reflexivity.
   apply multi_refl.
 Qed.
 
@@ -141,7 +137,7 @@ Fixpoint env_lookup p x :=
   match p with
     | env_empty => None
     | env_extend q y a =>
-      if beq_id x y then Some a else env_lookup q x
+      if beq_nat x y then Some a else env_lookup q x
   end.
 
 Fixpoint store_lookup (s : store) (a : addr) : option storable :=
@@ -180,19 +176,8 @@ Lemma store_lookup_length_inv :
     n < length s.
 Proof.
   intros s n. generalize dependent s.
-  induction n as [| n']; intros.
-  Case "n = 0".
-    destruct s as [| x s'].
-    SCase "s = []".
-      inversion H.
-    SCase "s = x :: s'".
-      simpl. omega.
-  Case "n = S n'".
-    destruct s as [| x s'].
-    SCase "s = []".
-      inversion H.
-    SCase "s = x :: s'".
-      inversion H. apply IHn' in H1. simpl. omega.
+  induction n as [| n']; intros;
+  destruct s; inversion H; simpl; try apply IHn' in H1; omega.
 Qed.
 
 Lemma store_lookup_length_app :
@@ -201,19 +186,8 @@ Lemma store_lookup_length_app :
     store_lookup (s1 ++ s2) n = store_lookup s1 n.
 Proof.
   intros. generalize dependent s2. generalize dependent s1.
-  induction n as [| n']; intros.
-  Case "n = 0".
-    destruct s1 as [| x1 s1'].
-    SCase "s1 = []".
-      inversion H.
-    SCase "s1 = x1 :: s1'".
-      reflexivity.
-  Case "n = S n'".
-    destruct s1 as [| x1 s1'].
-    SCase "s1 = []".
-      inversion H.
-    SCase "s1 = x1 :: s1'".
-      simpl. apply IHn'. inversion H. auto. omega.
+  induction n as [| n']; intros;
+  destruct s1; inversion H; auto; apply IHn'; omega.
 Qed.
 
 Lemma store_lookup_alloc_pres :
@@ -223,10 +197,8 @@ Lemma store_lookup_alloc_pres :
 Proof.
   intros.
   destruct a as [| n'].
-  Case "a = 0".
-    destruct s; inversion H. reflexivity.
-  Case "a = S n'".
-    destruct s as [| (v, p') s']; inversion H. simpl. 
+  - destruct s; inversion H. reflexivity.
+  - destruct s as [| (v, p') s']; inversion H. simpl. 
     apply store_lookup_length_app.
     eapply store_lookup_length_inv.
     eassumption.
@@ -294,7 +266,7 @@ Proof.
   eapply multi_step. apply cesk0.
   eapply multi_step. apply cesk4.
   eapply multi_step. eapply cesk1.
-    simpl. rewrite <- beq_id_refl. reflexivity. reflexivity.
+    simpl. rewrite <- beq_nat_refl. reflexivity. reflexivity.
   apply multi_refl.
 Qed.
 
@@ -324,10 +296,8 @@ Lemma cek_sim_cesk_env_store_empty_inv :
 Proof.
   intros p1 p2 H.
   inversion H; subst.
-  Case "empty_sim".
-    split; reflexivity.
-  Case "extend_sim".
-    destruct a; inversion H2.
+  - split; reflexivity.
+  - destruct a; inversion H2.
 Qed.
 
 Lemma cek_sim_cesk_env_store_weakening :
@@ -338,13 +308,11 @@ Lemma cek_sim_cesk_env_store_weakening :
 Proof.
   intros p1 p2 s2 H v p'.
   induction H.
-  Case "empty_sim".
-    apply empty_sim.
-  Case "extend_sim".
-    eapply extend_sim.
-      assumption.
-      eassumption.
-      apply CESK.store_lookup_alloc_pres. assumption.
+  - apply empty_sim.
+  - eapply extend_sim.
+    assumption.
+    eassumption.
+    apply CESK.store_lookup_alloc_pres. assumption.
 Qed.
 
 Lemma cek_sim_cesk_env_lookup_cek :
@@ -359,17 +327,13 @@ Lemma cek_sim_cesk_env_lookup_cek :
 Proof.
   intros p1 p2 s2 H1.
   induction H1; intros.
-  Case "empty_sim".
-    inversion H.
-  Case "extend_sim".
-    remember (beq_id x0 x) as b. destruct b.
-    SCase "x0 = x".
-      simpl in H0. rewrite <- Heqb in H0. inversion H0. subst.
+  - inversion H.
+  - remember (beq_nat x0 x) as b. destruct b.
+    + simpl in H0. rewrite <- Heqb in H0. inversion H0. subst.
       apply ex_intro with a. apply ex_intro with p2.
       split. simpl. rewrite <- Heqb. reflexivity.
       split; assumption.
-    SCase "x0 <> x".
-      simpl in H0. rewrite <- Heqb in H0.
+    + simpl in H0. rewrite <- Heqb in H0.
       simpl. rewrite <- Heqb.
       apply IHcek_sim_cesk_env1.
       assumption.
@@ -387,18 +351,11 @@ Lemma cek_sim_cesk_env_lookup_cesk :
 Proof.
   intros p1 p2 s2 H1.
   induction H1; intros.
-  Case "empty_sim".
-    inversion H. inversion H0.
-  Case "extend_sim".
-    remember (beq_id x0 x) as b. destruct b.
-    SCase "x0 = x".
-      inversion H3. subst. rewrite H in H1. inversion H1. subst.
-      simpl. rewrite <- Heqb. apply ex_intro with p1.
-      split. reflexivity. assumption.
-    SCase "x0 <> x".
-      simpl. rewrite <- Heqb.
-      eapply IHcek_sim_cesk_env1. eassumption.
-      assumption.
+  - inversion H.
+  - inversion H0. remember (beq_nat x0 x) as b. destruct b.
+    + inversion H3. subst. rewrite H in H1. inversion H1. subst.
+      simpl. rewrite <- Heqb. exists p1. split; auto.
+    + simpl. rewrite <- Heqb. eapply IHcek_sim_cesk_env1; eauto.
 Qed.
 
 Inductive cek_sim_cesk_kont : CEK.kont -> CESK.kont -> CESK.store -> Prop :=
@@ -428,16 +385,13 @@ Lemma cek_sim_cesk_kont_store_weakening :
 Proof.
   intros k1 k2 s2 H v p'.
   induction H.
-  Case "mt_sim".
-    apply mt_sim.
-  Case "ar_sim".
-    apply ar_sim.
-      apply cek_sim_cesk_env_store_weakening. assumption.
-      assumption.
-  Case "fn_sim".
-    apply fn_sim.
-      apply cek_sim_cesk_env_store_weakening. assumption.
-      assumption.
+  - apply mt_sim.
+  - apply ar_sim.
+    + apply cek_sim_cesk_env_store_weakening. assumption.
+    + assumption.
+  - apply fn_sim.
+    + apply cek_sim_cesk_env_store_weakening. assumption.
+    + assumption.
 Qed.
 
 Inductive cek_sim_cesk_state : CEK.state -> CESK.state -> Prop :=
@@ -456,48 +410,30 @@ Inductive cek_sim_cesk_state : CEK.state -> CESK.state -> Prop :=
 
 Hint Constructors cek_sim_cesk_state.
 
-Notation "s1 '~' t1" := (cek_sim_cesk_state s1 t1) (at level 40).
-
 (* ###################################################################### *)
-
-Inductive multi_n {X : Type} (R : relation X) : X -> X -> nat -> Prop :=
-  | multi_n_refl : forall x,
-                     multi_n R x x 0
-  | multi_n_step : forall x y z n,
-                     multi_n R x y n ->
-                     R y z ->
-                     multi_n R x z (1 + n).
-
-Hint Constructors multi_n.
 
 Lemma cek_sim_cesk_step :
   forall e s n,
     multi_n CEK.step (CEK.inj e) s n ->
     exists t,
-      multi_n CESK.step (CESK.inj e) t n /\ s ~ t.
+      multi_n CESK.step (CESK.inj e) t n /\
+      cek_sim_cesk_state s t.
 Proof.
   intros e s n. generalize dependent s.
   induction n as [| n']; (intros s H; inversion H; subst).
-  Case "n = 0".
-    unfold CEK.inj in H. unfold CESK.inj.
+  - unfold CEK.inj in H. unfold CESK.inj.
     eapply ex_intro. split; [auto | unfold CEK.inj; auto].
-  Case "n = S n'".
-    apply IHn' in H1. inversion H1. inversion H0.
+  - apply IHn' in H1. inversion H1. inversion H0.
     inversion H4; subst; inversion H3; subst.
-    SCase "cek0".
-      eapply ex_intro. split. eauto. auto.
-    SCase "cek1".
-      apply cek_sim_cesk_env_lookup_cek with p p2 s2 x0 v p' in H10.
-        inversion H10. inversion H6. inversion H7. inversion H9.
-        eapply ex_intro. split; eauto.
+    + eapply ex_intro. split. eauto. auto.
+    + apply cek_sim_cesk_env_lookup_cek with p p2 s2 x0 v p' in H10.
+      inversion H10. inversion H6. inversion H7. inversion H9.
+      eapply ex_intro. split; eauto.
       assumption.
-    SCase "cek2".
+    + eapply ex_intro. split. eauto. auto.
+    + inversion H10. subst.
       eapply ex_intro. split. eauto. auto.
-    SCase "cek3".
-      inversion H10. subst.
-      eapply ex_intro. split. eauto. auto.
-    SCase "cek4".
-      inversion H10. subst.
+    + inversion H10. subst.
       apply cek_sim_cesk_env_store_weakening with p p2 s2 v p2 in H9.
       apply cek_sim_cesk_env_store_weakening with p' p0 s2 v p2 in H12.
       eapply ex_intro. split. eauto. 
@@ -511,6 +447,7 @@ Lemma cesk_sim_cek_step :
   forall e t n,
     multi_n CESK.step (CESK.inj e) t n ->
     exists s,
-      multi_n CEK.step (CEK.inj e) s n /\ s ~ t.
+      multi_n CEK.step (CEK.inj e) s n /\
+      cek_sim_cesk_state s t.
 Proof.
   Admitted. (* TODO *)
