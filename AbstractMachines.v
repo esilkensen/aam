@@ -7,9 +7,6 @@ Require Import Omega.
 
 Definition relation (X : Type) := X -> X -> Prop.
 
-Definition deterministic {X : Type} (R : relation X) :=
-  forall x y1 y2 : X, R x y1 -> R x y2 -> y1 = y2.
-
 Inductive multi {X : Type} (R : relation X) : X -> X -> Prop :=
   | multi_refl : forall (x : X),
                    multi R x x
@@ -118,12 +115,28 @@ Hint Constructors step.
 Notation "s1 '==>*' s2" := (multi step s1 s2) (at level 40).
 
 Lemma step_deterministic :
-  deterministic step.
+  forall s1 s2 s2',
+    s1 ==> s2 ->
+    s1 ==> s2' ->
+    s2 = s2'.
 Proof.
-  unfold deterministic. intros s1 s2 s2' H1 H2.
+  intros s1 s2 s2' H1 H2.
   destruct H1; inversion H2; auto.
   apply (env_lookup_deterministic p x v p' v0 p'0) in H5;
     inversion H5; auto.
+Qed.
+
+Lemma multi_n_step_deterministic :
+  forall n s1 s2 s2',
+    multi_n step s1 s2 n ->
+    multi_n step s1 s2' n ->
+    s2 = s2'.
+Proof.
+  intros n. induction n as [| n']; intros; inversion H; inversion H0; subst.
+  - assumption.
+  - apply (IHn' s1 y y0) in H7.
+    + subst. apply (step_deterministic y0 s2 s2'); assumption.
+    + assumption.
 Qed.
 
 Example ex1 :
@@ -311,14 +324,30 @@ Hint Constructors step.
 Notation "s1 '==>*' s2" := (multi step s1 s2) (at level 40).
 
 Lemma step_deterministic :
-  deterministic step.
+  forall s1 s2 s2',
+    s1 ==> s2 ->
+    s1 ==> s2' ->
+    s2 = s2'.
 Proof.
-  unfold deterministic. intros s1 s2 s2' H1 H2.
+  intros s1 s2 s2' H1 H2.
   destruct H1; inversion H2; subst; auto.
   apply (env_lookup_deterministic p x a a0) in H7. subst.
   apply (store_lookup_deterministic s a0 v0 p'0 v p') in H0.
     inversion H0. reflexivity.
   assumption. assumption.
+Qed.
+
+Lemma multi_n_step_deterministic :
+  forall n s1 s2 s2',
+    multi_n step s1 s2 n ->
+    multi_n step s1 s2' n ->
+    s2 = s2'.
+Proof.
+  intros n. induction n as [| n']; intros; inversion H; inversion H0; subst.
+  - assumption.
+  - apply (IHn' s1 y y0) in H7.
+    + subst. apply (step_deterministic y0 s2 s2'); assumption.
+    + assumption.
 Qed.
 
 Example ex1 :
@@ -480,7 +509,7 @@ Hint Constructors cek_sim_cesk_state.
 
 (* ###################################################################### *)
 
-Lemma cek_sim_cesk_step :
+Lemma cek_sim_cesk_step_ex :
   forall e s n,
     multi_n CEK.step (CEK.inj e) s n ->
     exists t,
@@ -511,7 +540,7 @@ Proof.
       assumption.
 Qed.
 
-Lemma cesk_sim_cek_step :
+Lemma cesk_sim_cek_step_ex :
   forall e t n,
     multi_n CESK.step (CESK.inj e) t n ->
     exists s,
@@ -540,4 +569,44 @@ Proof.
       apply CESK.store_lookup_alloc_some.
       apply cek_sim_cesk_kont_store_weakening.
       assumption.
+Qed.
+
+Lemma cek_sim_cesk_step :
+  forall e s n,
+    multi_n CEK.step (CEK.inj e) s n ->
+    (exists t,
+       multi_n CESK.step (CESK.inj e) t n) /\
+    (forall t,
+       multi_n CESK.step (CESK.inj e) t n ->
+       cek_sim_cesk_state s t).
+Proof.
+  intros e s n. generalize dependent s.
+  induction n as [| n']; intros s H1; inversion H1; subst.
+  - unfold CEK.inj in H1. unfold CESK.inj. split.
+    + apply cek_sim_cesk_step_ex in H1. eauto.
+    + intros t H2. unfold CEK.inj. inversion H2. auto.
+  - apply cek_sim_cesk_step_ex in H1. destruct H1.  destruct H. split; eauto.
+    apply IHn' in H0. destruct H0. intros.
+    apply CESK.multi_n_step_deterministic with (s2 := x) in H3. subst.
+    assumption. assumption.
+Qed.
+
+Lemma cesk_sim_cek_step :
+  forall e t n,
+    multi_n CESK.step (CESK.inj e) t n ->
+    (exists s,
+       multi_n CEK.step (CEK.inj e) s n) /\
+    (forall s,
+       multi_n CEK.step (CEK.inj e) s n ->
+       cek_sim_cesk_state s t).
+Proof.
+  intros e t n. generalize dependent t.
+  induction n as [| n']; intros t H1; inversion H1; subst.
+  - unfold CESK.inj in H1. unfold CEK.inj. split.
+    + apply cesk_sim_cek_step_ex in H1. eauto.
+    + intros s H2. unfold CESK.inj. inversion H2. auto.
+  - apply cesk_sim_cek_step_ex in H1. destruct H1.  destruct H. split; eauto.
+    apply IHn' in H0. destruct H0. intros.
+    apply CEK.multi_n_step_deterministic with (s2 := x) in H3. subst.
+    assumption. assumption.
 Qed.
