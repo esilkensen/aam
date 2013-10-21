@@ -488,19 +488,19 @@ Lemma cek_sim_cesk_step :
       cek_sim_cesk_state s t.
 Proof.
   intros e s n. generalize dependent s.
-  induction n as [| n']; (intros s H; inversion H; subst).
+  induction n as [| n']; intros s H; inversion H; subst.
   - unfold CEK.inj in H. unfold CESK.inj.
     eapply ex_intro. split; [auto | unfold CEK.inj; auto].
   - apply IHn' in H1. inversion H1. inversion H0.
     inversion H4; subst; inversion H3; subst.
-    + eapply ex_intro. split. eauto. auto.
+    + eapply ex_intro. split; eauto.
     + apply cek_sim_cesk_env_lookup_cek with p p2 s2 x0 v p' in H10.
       inversion H10. inversion H6. inversion H7. inversion H9.
       eapply ex_intro. split; eauto.
       assumption.
-    + eapply ex_intro. split. eauto. auto.
+    + eapply ex_intro. split; eauto. 
     + inversion H10. subst.
-      eapply ex_intro. split. eauto. auto.
+      eapply ex_intro. split; eauto.
     + inversion H10. subst.
       apply cek_sim_cesk_env_store_weakening with p p2 s2 v p2 in H9.
       apply cek_sim_cesk_env_store_weakening with p' p0 s2 v p2 in H12.
@@ -518,4 +518,26 @@ Lemma cesk_sim_cek_step :
       multi_n CEK.step (CEK.inj e) s n /\
       cek_sim_cesk_state s t.
 Proof.
-  Admitted. (* TODO *)
+  intros e t n. generalize dependent t.
+  induction n as [| n']; intros t H; inversion H; subst.
+  - unfold CESK.inj in H. unfold CEK.inj.
+    eapply ex_intro. split; [auto | unfold CESK.inj; auto].
+  - apply IHn' in H1. inversion H1. inversion H0.
+    inversion H4; subst; inversion H3; subst.
+    + eapply ex_intro. split; eauto.
+    + apply cek_sim_cesk_env_lookup_cesk with p1 p s x0 a v p' in H10.
+      inversion H10. inversion H7.
+      eapply ex_intro. split; eauto.
+      assumption. assumption.
+    + eapply ex_intro. split; eauto.
+    + inversion H11. subst.
+      eapply ex_intro. split; eauto.
+    + inversion H11. subst.
+      apply cek_sim_cesk_env_store_weakening with p1 p s v p in H8.
+      apply cek_sim_cesk_env_store_weakening with p0 p' s v p in H12.
+      eapply ex_intro. split. eauto.
+      apply ev_sim. eapply extend_sim; eauto.
+      apply CESK.store_lookup_alloc_some.
+      apply cek_sim_cesk_kont_store_weakening.
+      assumption.
+Qed.
