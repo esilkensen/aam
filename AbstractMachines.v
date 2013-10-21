@@ -7,6 +7,9 @@ Require Import Omega.
 
 Definition relation (X : Type) := X -> X -> Prop.
 
+Definition deterministic {X : Type} (R : relation X) :=
+  forall x y1 y2 : X, R x y1 -> R x y2 -> y1 = y2.
+
 Inductive multi {X : Type} (R : relation X) : X -> X -> Prop :=
   | multi_refl : forall (x : X),
                    multi R x x
@@ -48,9 +51,23 @@ Inductive env : Type :=
 Fixpoint env_lookup p x :=
   match p with
     | env_empty => None
-    | env_extend q y (v, p') =>
-      if beq_nat x y then Some (v, p') else env_lookup q x
+    | env_extend q y vp' =>
+      if beq_nat x y then Some vp' else env_lookup q x
   end.
+
+Lemma env_lookup_deterministic :
+  forall p x v1 p1' v2 p2',
+    env_lookup p x = Some (v1, p1') ->
+    env_lookup p x = Some (v2, p2') ->
+    (v1, p1') = (v2, p2').
+Proof.
+  intros p. induction p as [| p IHp y (v, p')]; intros x v1 p1' v2 p2' H1 H2.
+  - inversion H1.
+  - remember (beq_nat x y) as b.
+    destruct b; simpl in H1; simpl in H2;
+    rewrite <- Heqb in H1; rewrite <- Heqb in H2;
+    rewrite H1 in H2; inversion H2; reflexivity.
+Qed.
 
 Inductive kont : Type :=
   | mt : kont
@@ -100,6 +117,15 @@ Hint Constructors step.
 
 Notation "s1 '==>*' s2" := (multi step s1 s2) (at level 40).
 
+Lemma step_deterministic :
+  deterministic step.
+Proof.
+  unfold deterministic. intros s1 s2 s2' H1 H2.
+  destruct H1; inversion H2; auto.
+  apply (env_lookup_deterministic p x v p' v0 p'0) in H5;
+    inversion H5; auto.
+Qed.
+
 Example ex1 :
   forall x y,
     inj (e_app (e_abs x (e_var x)) (e_abs y (e_var y)))
@@ -140,6 +166,23 @@ Fixpoint env_lookup p x :=
       if beq_nat x y then Some a else env_lookup q x
   end.
 
+Lemma env_lookup_deterministic :
+  forall p x a1 a2,
+    env_lookup p x = Some a1 ->
+    env_lookup p x = Some a2 ->
+    a1 = a2.
+Proof.
+  intros p.
+  induction p as [| p IHp y a]; intros x a1 a2 H1 H2.
+  - inversion H1.
+  - remember (beq_nat x y) as b.
+    destruct b;
+      simpl in H1; simpl in H2;
+      rewrite <- Heqb in H1; rewrite <- Heqb in H2;
+      inversion H1; inversion H2;
+      subst; auto; eapply IHp; eauto.
+Qed.
+
 Fixpoint store_lookup (s : store) (a : addr) : option storable :=
   match a with
     | 0 => match s with
@@ -151,6 +194,20 @@ Fixpoint store_lookup (s : store) (a : addr) : option storable :=
                 | _ :: s' => store_lookup s' n'
               end
   end.
+
+Lemma store_lookup_deterministic :
+  forall s a v1 p1' v2 p2',
+    store_lookup s a = Some (v1, p1') ->
+    store_lookup s a = Some (v2, p2') ->
+    (v1, p1') = (v2, p2').
+Proof.
+  intros s.
+  induction s as [| (v, p) s']; intros a v1 p1' v2 p2' H1 H2.
+  - destruct a; inversion H1.
+  - destruct a; simpl in H1; simpl in H2.
+    + rewrite H1 in H2. inversion H2. reflexivity.
+    + eapply IHs'; eauto.
+Qed.
 
 Definition store_extend s x : store := s ++ [x].
 
@@ -252,6 +309,17 @@ where "s1 '==>' s2" := (step s1 s2).
 Hint Constructors step.
 
 Notation "s1 '==>*' s2" := (multi step s1 s2) (at level 40).
+
+Lemma step_deterministic :
+  deterministic step.
+Proof.
+  unfold deterministic. intros s1 s2 s2' H1 H2.
+  destruct H1; inversion H2; subst; auto.
+  apply (env_lookup_deterministic p x a a0) in H7. subst.
+  apply (store_lookup_deterministic s a0 v0 p'0 v p') in H0.
+    inversion H0. reflexivity.
+  assumption. assumption.
+Qed.
 
 Example ex1 :
   forall x y,
