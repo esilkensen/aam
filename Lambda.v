@@ -1,5 +1,4 @@
 Require Export Arith.
-Require Export Omega.
 
 Definition id : Type := nat.
 
