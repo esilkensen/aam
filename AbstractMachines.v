@@ -133,7 +133,7 @@ Lemma multi_n_step_deterministic :
     s2 = s2'.
 Proof.
   intros n. induction n as [| n']; intros; inversion H; inversion H0; subst.
-  - assumption.
+  - reflexivity.
   - apply (IHn' s1 y y0) in H7.
     + subst. apply (step_deterministic y0 s2 s2'); assumption.
     + assumption.
@@ -344,7 +344,7 @@ Lemma multi_n_step_deterministic :
     s2 = s2'.
 Proof.
   intros n. induction n as [| n']; intros; inversion H; inversion H0; subst.
-  - assumption.
+  - reflexivity.
   - apply (IHn' s1 y y0) in H7.
     + subst. apply (step_deterministic y0 s2 s2'); assumption.
     + assumption.
