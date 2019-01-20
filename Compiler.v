@@ -49,7 +49,7 @@ Fixpoint compile (e : expr) : prog :=
   | Plus e1 e2 => (compile e2) ++ (compile e1) ++ [iplus]
   end.
 
-Lemma semantic_preservation' : forall (e : expr) (p : prog) (s : stack),
+Lemma semantic_preservation_gen : forall (e : expr) (p : prog) (s : stack),
     progDenote (compile e ++ p) s = progDenote p (exprDenote e :: s).
 Proof.
   (* FILL IN HERE *) Admitted.
