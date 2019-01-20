@@ -10,7 +10,7 @@ Inductive expr : Set :=
 Fixpoint exprDenote (e : expr) : nat :=
   match e with
   | Const n => n
-  | Plus e1 e2 => plus (exprDenote e1) (exprDenote e2)
+  | Plus e1 e2 => exprDenote e1 + exprDenote e2
   end.
 
 (* Target Language *)
@@ -25,7 +25,7 @@ Definition instrDenote (i : instr) (s : stack) : option stack :=
   match i with
   | iconst n => Some (n :: s)
   | iplus => match s with
-             | n :: m :: s' => Some (plus n m :: s')
+             | n1 :: n2 :: s' => Some (n1 + n2 :: s')
              | _ => None
              end
   end.
@@ -46,7 +46,7 @@ Fixpoint progDenote (p : prog) (s : stack) : option stack :=
 Fixpoint compile (e : expr) : prog :=
   match e with
   | Const n => [iconst n]
-  | Plus e1 e2 => (compile e2) ++ (compile e1) ++ [iplus]
+  | Plus e1 e2 => compile e2 ++ compile e1 ++ [iplus]
   end.
 
 Lemma semantic_preservation_gen : forall (e : expr) (p : prog) (s : stack),
