@@ -1,4 +1,5 @@
-Require Import List.
+Add LoadPath "cpdt".
+Require Import List CpdtTactics.
 Import ListNotations.
 
 (* Source Language *)
