@@ -20,6 +20,8 @@ Inductive instr : Set :=
 | iconst : nat -> instr
 | iplus : instr.
 
+Definition prog := list instr.
+
 Definition stack := list nat.
 
 Definition instrDenote (i : instr) (s : stack) : option stack :=
@@ -30,8 +32,6 @@ Definition instrDenote (i : instr) (s : stack) : option stack :=
              | _ => None
              end
   end.
-
-Definition prog := list instr.
 
 Fixpoint progDenote (p : prog) (s : stack) : option stack :=
   match p with
@@ -53,9 +53,11 @@ Fixpoint compile (e : expr) : prog :=
 Lemma semantic_preservation_gen : forall (e : expr) (p : prog) (s : stack),
     progDenote (compile e ++ p) s = progDenote p (exprDenote e :: s).
 Proof.
-  (* FILL IN HERE *) Admitted.
+  (* TODO *)
+Admitted.
 
 Theorem semantic_preservation : forall (e : expr),
     progDenote (compile e) [] = Some [exprDenote e].
 Proof.
-  (* FILL IN HERE *) Admitted.
+  (* TODO *)
+Admitted.
