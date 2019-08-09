@@ -53,11 +53,24 @@ Fixpoint compile (e : expr) : prog :=
 Lemma semantic_preservation_gen : forall (e : expr) (p : prog) (s : stack),
     progDenote (compile e ++ p) s = progDenote p (exprDenote e :: s).
 Proof.
-  (* TODO *)
-Admitted.
+  intro e.
+  induction e; intros; simpl.
+  - (* Base Case: e = Const n *)
+    reflexivity.
+  - (* Inductive Case: e = Plus e1 e2 *)
+    rewrite app_assoc_reverse.
+    rewrite IHe2.
+    rewrite app_assoc_reverse.
+    rewrite IHe1.
+    reflexivity.
+Qed.
+
 
 Theorem semantic_preservation : forall (e : expr),
     progDenote (compile e) [] = Some [exprDenote e].
 Proof.
-  (* TODO *)
-Admitted.
+  intro e.
+  rewrite (app_nil_end (compile e)).
+  rewrite semantic_preservation_gen.
+  reflexivity.
+Qed.
